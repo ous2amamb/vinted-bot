@@ -1,0 +1,45 @@
+import requests
+from bs4 import BeautifulSoup
+import time
+import os
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
+URL = os.getenv("URL")
+TARGET_PRICE = float(os.getenv("TARGET_PRICE", 20))
+
+def send_telegram(msg):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    data = {"chat_id": CHAT_ID, "text": msg}
+    requests.post(url, data=data)
+
+def check_vinted():
+    headers = {"User-Agent": "Mozilla/5.0"}
+    r = requests.get(URL, headers=headers)
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    items = soup.select(".feed-grid__item")
+
+    for item in items[:5]:
+        title = item.get_text(strip=True)
+
+        price_tag = item.select_one(".price")
+        if not price_tag:
+            continue
+
+        price_text = price_tag.get_text().replace("€", "").replace(",", ".").strip()
+
+        try:
+            price = float(price_text)
+        except:
+            continue
+
+        if price <= TARGET_PRICE:
+            send_telegram(f"🔥 Deal found!\n{title}\n💶 {price}€")
+
+while True:
+    try:
+        check_vinted()
+    except Exception as e:
+        send_telegram(f"Error: {e}")
+    time.sleep(300)
