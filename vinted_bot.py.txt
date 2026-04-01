@@ -6,7 +6,8 @@ import os
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 URL = os.getenv("URL")
-TARGET_PRICE = float(os.getenv("TARGET_PRICE", 20))
+
+seen_items = set()
 
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -14,32 +15,45 @@ def send_telegram(msg):
     requests.post(url, data=data)
 
 def check_vinted():
-    headers = {"User-Agent": "Mozilla/5.0"}
+    global seen_items
+
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
+
     r = requests.get(URL, headers=headers)
     soup = BeautifulSoup(r.text, "html.parser")
 
     items = soup.select(".feed-grid__item")
 
-    for item in items[:5]:
+    for item in items[:10]:  # check first 10 items
         title = item.get_text(strip=True)
 
+        if title in seen_items:
+            continue
+
+        seen_items.add(title)
+
+        # try to get price
         price_tag = item.select_one(".price")
-        if not price_tag:
-            continue
+        price = price_tag.get_text(strip=True) if price_tag else "N/A"
 
-        price_text = price_tag.get_text().replace("€", "").replace(",", ".").strip()
+        # try to get link
+        link_tag = item.find("a", href=True)
+        link = "https://www.vinted.de" + link_tag["href"] if link_tag else ""
 
+        message = f"🔥 New item found!\n\n{title}\n💶 {price}\n🔗 {link}"
+
+        send_telegram(message)
+
+def main():
+    while True:
         try:
-            price = float(price_text)
-        except:
-            continue
+            check_vinted()
+        except Exception as e:
+            send_telegram(f"⚠️ Error: {e}")
 
-        if price <= TARGET_PRICE:
-            send_telegram(f"🔥 Deal found!\n{title}\n💶 {price}€")
+        time.sleep(300)  # 5 minutes
 
-while True:
-    try:
-        check_vinted()
-    except Exception as e:
-        send_telegram(f"Error: {e}")
-    time.sleep(300)
+if __name__ == "__main__":
+    main()
